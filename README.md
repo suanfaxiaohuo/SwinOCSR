@@ -1,5 +1,5 @@
 # SwinOCSR
 The datasets are available in SMILES format  
-./dataset
+./dataset  
 user GenerateBatchimage to generate the images  
 user Binary_images to generate binary images  
