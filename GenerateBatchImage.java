@@ -21,7 +21,7 @@ public class GenerateBatchImage {
     public static void main(String[] args) throws Exception {
         IChemObjectBuilder bldr   = SilentChemObjectBuilder.getInstance();
         SmilesParser smipar = new SmilesParser(bldr);
-        String smilesFileName = "./wrong_3_smiles.txt";
+        String smilesFileName = "./smiles.txt";
         String pngFileName ="./images";
         List<String> errornum = new ArrayList<String>();
         File file = new File(smilesFileName);
