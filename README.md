@@ -1,4 +1,4 @@
 # SwinOCSR
-The datasets are available in SMILES format
-user generation_image to generate the images
-user covert_image to generate binary images
+The datasets are available in SMILES format \n
+user generation_image to generate the images \n
+user covert_image to generate binary images\n
