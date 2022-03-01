@@ -10,7 +10,7 @@ Please see INSTALL.md
 
 ### Image
 
-The **datasets** are available in SMILES format to generate images
+The our **datasets** are available in SMILES format to generate images
 
 Download form "dataset"
 
