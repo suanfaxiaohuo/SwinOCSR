@@ -45,12 +45,12 @@ Data
 
 ## Trained models
 
-| Name                         | ACC    | Model                                    |
-| ---------------------------- | ------ | ---------------------------------------- |
-| Swin Transformer(ce loss)    | 0.9736 | https://www.kaggle.com/gogogogo11/moedel |
-| ResNet-50                    | 0.8917 | https://www.kaggle.com/gogogogo11/moedel |
-| EfficientNet-B3              | 0.8670 | https://www.kaggle.com/gogogogo11/moedel |
-| Swin Transformer(focal loss) | 0.9858 | https://www.kaggle.com/gogogogo11/moedel |
+| Name                         | Accuracy | Tanimoto | Model                                    |
+| ---------------------------- | -------- | -------- | ---------------------------------------- |
+| Swin Transformer(ce loss)    | 0.9736   | 0.9965   | https://www.kaggle.com/gogogogo11/moedel |
+| ResNet-50                    | 0.8917   | 0.9879   | https://www.kaggle.com/gogogogo11/moedel |
+| EfficientNet-B3              | 0.8670   | 0.9846   | https://www.kaggle.com/gogogogo11/moedel |
+| Swin Transformer(focal loss) | 0.9858   | 0.9977   | https://www.kaggle.com/gogogogo11/moedel |
 
 
 
