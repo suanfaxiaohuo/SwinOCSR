@@ -24,10 +24,10 @@ class Translator(nn.Module):
         self.model = model
         self.model.eval()
 
-        # 存放 bos 即开始字符
+
         self.register_buffer('init_seq', torch.ones(self.batch_size, 1).fill_(trg_bos_idx).type(torch.long).cuda())
 
-        # 创建 [beam size, max_seq_len]的tensor 注意该矩阵 第一列为 bos
+
         self.register_buffer(
             'blank_seqs',
             torch.full((self.batch_size, beam_size, max_seq_len), trg_pad_idx, dtype=torch.long))
@@ -39,14 +39,12 @@ class Translator(nn.Module):
 
     def _model_decode(self, trg_seq, enc_output, src_mask):
         """
-        trg_seq :  生成的目标句子 ,[beam size ,current target length, hidden size]
-        但是如果 batch size不为1，应为[beam size * batch size,current target length, hidden size]
-        但是预测阶段 通常 batch size 为 1。
-        sec_output : encoder端的输出 一般为 [batch size, seq length, hidden size],
-        由于是predict阶段所以batch size一般为1
-        src_mask : 源句子的mask
+        trg_seq :  generate target sentenct ,[beam size ,current target length, hidden size]
+        batch size!=1，[beam size * batch size,current target length, hidden size]
+        stage of prediction batch size == 1。
+        sec_output : encoder [batch size, seq length, hidden size],
         """
-        # 生成句子的mask
+        # generate sentence mask
         trg_seq = trg_seq.reshape(self.batch_size * self.beam_size, -1)
 
         trg_mask = get_subsequent_mask(trg_seq)
@@ -55,56 +53,53 @@ class Translator(nn.Module):
 
         enc_output = enc_output.reshape(self.batch_size*self.beam_size, -1, 256)
 
-        # tar_seq 变为 [beam size, current target length, hidden size]
+        # tar_seq change [beam size, current target length, hidden size]
 
         dec_output = self.model.decoder(trg_seq, enc_output, trg_mask)
 
         dec_output = dec_output.view(self.batch_size, self.beam_size, -1, self.vocab_size)
 
-        # 这里把 hidden state 映射为 traget vocab, 即[hidden size -> vocab size]
+        #  hidden state -> traget vocab, [hidden size -> vocab size]
         return F.softmax(dec_output, dim=-1)
 
     def _model_decode_init(self, trg_seq, enc_output, src_mask):
         """
-        trg_seq :  生成的目标句子 ,[beam size ,current target length, hidden size]
-        但是如果 batch size不为1，应为[beam size * batch size,current target length, hidden size]
-        但是预测阶段 通常 batch size 为 1。
-        sec_output : encoder端的输出 一般为 [batch size, seq length, hidden size],
-        由于是predict阶段所以batch size一般为1
-        src_mask : 源句子的mask
+        trg_seq :  generate target sentenct ,[beam size ,current target length, hidden size]
+        if batch size!=1，[beam size * batch size,current target length, hidden size]
+        stage of prediction batch size=1。
+        sec_output : encoder [batch size, seq length, hidden size],
+
         """
 
-        # 生成句子的mask
+        # generate sentence mask
         trg_mask = get_subsequent_mask(trg_seq)
         trg_mask = trg_mask.cuda()
         trg_seq = trg_seq.cuda()
-        # tar_seq 变为 [beam size, current target length, hidden size]
+        # tar_seq change  [beam size, current target length, hidden size]
         dec_output = self.model.decoder(trg_seq, enc_output, trg_mask)
-        # 这里把 hidden state 映射为 traget vocab, 即[hidden size -> vocab size]
+        #  hidden state -> traget vocab, 即[hidden size -> vocab size]
         return F.softmax(dec_output, dim=-1)
 
 
     def _get_init_state(self, src_seq, src_mask):
-        """
-        此函数主要是第一次 decoder输入时一些变量的配置
-        """
 
-        # beam_size 即 宽度
+
+        # Beam_size represent width
         beam_size = self.beam_size
 
-        # encoder端的输出
+        # Encoder output
         enc_output = self.model.encoder(src_seq)
 
-        # dec_ouput 为 字符 bos 对应的输出
+        # Dec_ouput represent bos output
         dec_output = self._model_decode_init(self.init_seq, enc_output, src_mask)
 
-        # 取出bos 字符生成的概率top k的字符
+        # Take bos top k char
         best_k_probs, best_k_idx = dec_output[:, -1, :].topk(beam_size)#(batch,beam)
 
         scores = torch.log(best_k_probs).view(self.batch_size, beam_size)
         gen_seq = self.blank_seqs.clone().detach()
 
-        # 矩阵的第二列 存放 概率最大的beam size个token
+        # The second column of the matrix stores the largest beam size tokens
         gen_seq[:, :, 1] = best_k_idx
 
         enc_output = enc_output.unsqueeze(1).repeat(1, beam_size, 1, 1)
@@ -116,7 +111,7 @@ class Translator(nn.Module):
         beam_size = self.beam_size
 
         # Get k candidates for each beam, k^2 candidates in total.
-        # 得到 [beam size, current targen length, vocab size] - > [beam size, 1, beam size]
+        # Get [beam size, current targen length, vocab size] - > [beam size, 1, beam size]
 
         best_k2_probs, best_k2_idx = dec_output[:, :, -1, :].topk(beam_size)#B,b，b
 
@@ -124,7 +119,7 @@ class Translator(nn.Module):
         scores = torch.log(best_k2_probs).view(self.batch_size, beam_size, -1) + scores.view(self.batch_size, beam_size, 1)
 
         # Get the best k candidates from k^2 candidates.
-        # 从 beam size * beam size 个结果中得到最优的k个候选
+        # The optimal k candidates were obtained from beam size * beam size results
         scores, best_k_idx_in_k2 = scores.view(self.batch_size, -1).topk(beam_size) #B,b
 
         # Get the corresponding positions of the best k candidiates.
@@ -139,7 +134,7 @@ class Translator(nn.Module):
                 best_k_idx = torch.cat((best_k_idx, best_k_idx_tmp), 0)
 
         # Copy the corresponding previous tokens.
-        # 找出top k的序列 ，覆盖掉gen_seq中 原有的序列
+        # Find the sequence of top K and cover the original sequence in Gen SEq
         #print(best_k_r_idxs)
         #print(best_k_idx)
         #print(best_k_idx.shape)
@@ -164,16 +159,16 @@ class Translator(nn.Module):
             #print(gen_seq)
             ans_idx = 0  # default
             for step in range(2, max_seq_len):  # decode up to max length
-                # 可以看到decoder的输入 为t时刻之前包括t时刻的。
+                # It can be seen that the decoder input is before t time including t time.
                 dec_output = self._model_decode(gen_seq[:, :, :step], enc_output, src_mask)
                 #print(dec_output)
-                # 得到最优的 beam size 个句子，以及对应score
+                # Get the optimal beam size sentences and corresponding score
                 gen_seq, scores = self._get_the_best_score_and_idx(gen_seq, dec_output, scores, step)
                 #print(gen_seq)
 
                 # Check if all path finished
                 # -- locate the eos in the generated sequences
-                # 判断 是否遇到 结束字符 eos
+                # Determines if the end character EOS is encountered
                 eos_locs = gen_seq == trg_eos_idx
                 # -- replace the eos with its position for the length penalty use
                 seq_lens, _ = self.len_map.masked_fill(~eos_locs, max_seq_len).min(2)

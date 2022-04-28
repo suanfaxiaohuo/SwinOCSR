@@ -85,7 +85,6 @@ def subsequent_mask(size):
     attn_shape = (1, size, size)
     subsequent_mask = np.triu(np.ones(attn_shape), k=1).astype('uint8')
     return torch.from_numpy(subsequent_mask) == 0
-# 相比于标准transformer ，少了src_vocab参数 nn.Sequential(Embeddings(d_model, src_vocab), c(position)),因为是图片到序列
 def make_transformer(N, d_model, tgt_vocab, d_ff=2048, h=8, dropout=0.1):
     c = copy.deepcopy
     attn = MultiHeadedAttention(h, d_model)
@@ -129,17 +128,15 @@ class DecoderWithTransformer(nn.Module):
         self.decoder_model = decoder_model
         N=6
         h=8
-        self.transformer = make_transformer(N=N, d_model=decoder_dim, tgt_vocab=vocab_size,d_ff=2048, h=h, dropout=0.1)#N=2 两层
-        print("Transformer堆叠层数N为:",N)
-        print("Transformer注意力头数H为:",h)
-        self.fc_encoder = nn.Linear(1536, decoder_dim) # 为了对编码图片后的通道数2048降低为256
+        self.transformer = make_transformer(N=N, d_model=decoder_dim, tgt_vocab=vocab_size,d_ff=2048, h=h, dropout=0.1)
+        self.fc_encoder = nn.Linear(1536, decoder_dim)
 
     def forward(self, encoded_captions, encoder_out, tgt_mask):
 
         with amp.autocast(self.tag):
-            encoder_out = self.fc_encoder(encoder_out) #(16,196,256)
-            src_masks = encoder_out.new_ones(encoder_out.shape[:2], dtype=torch.long) #(16,196)
-            src_masks = src_masks.unsqueeze(-2) #(16,1,196)
+            encoder_out = self.fc_encoder(encoder_out)
+            src_masks = encoder_out.new_ones(encoder_out.shape[:2], dtype=torch.long)
+            src_masks = src_masks.unsqueeze(-2)
             preds = self.transformer(encoder_out, encoded_captions, src_mask=src_masks, tgt_mask=tgt_mask)
 
         return preds
@@ -152,7 +149,7 @@ class DecoderWithTransformerDecoder(nn.Module):
         c = copy.deepcopy
         self.decoder_model = decoder_model
         # self.decoder_layer = nn.TransformerDecoderLayer(d_model=decoder_dim, nhead=8) #d_model:
-        self.transformer = make_transformer_decoder(N=2, d_model=decoder_dim)#N=2 两层
+        self.transformer = make_transformer_decoder(N=2, d_model=decoder_dim)
 
         self.embedding = nn.Sequential(Embeddings(decoder_dim, vocab_size), c(PositionalEncoding(decoder_dim, dropout)))
 

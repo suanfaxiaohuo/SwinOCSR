@@ -149,8 +149,6 @@ def parse_option():
 
 
 def main(config) :
-    print("当前时间为：", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
-    print("当前GPU设备索引为：", torch.cuda.current_device())  # 返回当前设备索引
     dir = '../../Data/500wan/500wan_shuffle_DeepSMILES'
     global best_acc, epochs_since_improvement, checkpoint, start_epoch, fine_tune_encoder, word_map
     word_map_file = '../../Data/500wan/500wan_shuffle_DeepSMILES_word_map'
@@ -287,32 +285,32 @@ def train_one_epoch(config, encoder, encoder_optimizer, decoder, decoder_optimiz
         caps_np = caps.cpu().tolist()
         # if mixup_fn is not None:
         #     samples, targets = mixup_fn(samples, targets)
-        caplens_np = caplens.squeeze().cpu().tolist()  # [31, 42, 23, 24, 39, 49, 25, 30, 39, 30, 22, 40, 34, 28, 61, 27]
+        caplens_np = caplens.squeeze().cpu().tolist()
         caps_input, caps_target, decode_lengths, tgt_pad_mask = [], [], [], []
         for index, caplen in enumerate(caplens_np):
-            caps_input.append(caps_np[index][:caplen - 1] + caps_np[index][caplen:])  # 将<end>去掉 由原来的82维度变成了81维度 [[],[]]
+            caps_input.append(caps_np[index][:caplen - 1] + caps_np[index][caplen:])  # Remove <end>去掉
             caps_target += caps_np[index][
-                           1:caplen]  # 去掉了<start>和后面多余pad  但是扔包含<end> 变成了30维度 [1, 1, 6, 10, 1, 7, 1, 17, 8, 1, 7, 10, 11, 8, 11, 1, 6, 7, 1, 8, 1, 12, 6, 1, 1, 11, 1, 1, 6, 50]
-            decode_lengths.append(caplen - 1)  # [30，41,22...26] 这个完全是序列的正常长度，去掉了<start>和<end>
+                           1:caplen]  # Removed <start> and extra pad after it
+            decode_lengths.append(caplen - 1)  # This is exactly the normal length of the sequence, with <start> and <end> removed.
 
-        caps_input = torch.tensor(caps_input).cuda() # tensor([[49, 1, 1, 6, 10, 1, 7, 1, 17, 8, 1, 7, 10, 11, 8, 11, 1, 6, 7,  ...,  0,  0,  0],[],[]])   [16,81]
-        targets = torch.tensor(caps_target, dtype=torch.long).cuda()  # [635]拉平到一维度
-        decode_lengths = np.array(decode_lengths)  # 不包括<start>
-        tgt_pad_mask = make_std_mask(caps_input, pad=0)  # [16,81,81] 不包括<start> 生成[81,81]的掩码，正常序列的部分为True,0填充的部分为False
+        caps_input = torch.tensor(caps_input).cuda()
+        targets = torch.tensor(caps_target, dtype=torch.long).cuda()  # Level to one dimension
+        decode_lengths = np.array(decode_lengths)
+        tgt_pad_mask = make_std_mask(caps_input, pad=0)  # Generate mask
         # print("caps_input",caps_input.size())
         # print("tgt_pad_mask",tgt_pad_mask.size())
         # tgt_pad_mask = torch.tensor(tgt_pad_mask).to(device)
         with amp.autocast(True):
             imgs = encoder(imgs)
-            scores = decoder(caps_input, imgs, tgt_pad_mask)  # scores:[16,81,256]  _:[16,81]
+            scores = decoder(caps_input, imgs, tgt_pad_mask)
             scores_packed = None
-            for index, decode_len in enumerate(decode_lengths):  # 去掉模型预测出 相对于正确标注 多余的部分
+            for index, decode_len in enumerate(decode_lengths):  # Removing the model predicted excess relative to correct labeling
                 if scores_packed is None:
-                    scores_packed = scores[index, :decode_len, :]  # [..,256]
+                    scores_packed = scores[index, :decode_len, :]
                 else:
                     scores_packed = torch.cat([scores_packed, scores[index, :decode_len, :]], dim=0)
 
-            scores = scores_packed  # [635, 256]
+            scores = scores_packed
             loss = criterion(scores, targets)
         encoder_optimizer.zero_grad()
         decoder_optimizer.zero_grad()
@@ -441,30 +439,28 @@ def validate_with_gold(encoder, decoder,  criterion, val_loader):
 
 
             caps_np = caps.cpu().tolist()
-            caplens_np = caplens.squeeze().cpu().tolist()  # [31, 42, 23, 24, 39, 49, 25, 30, 39, 30, 22, 40, 34, 28, 61, 27]
+            caplens_np = caplens.squeeze().cpu().tolist()
             caps_input, caps_target, decode_lengths, tgt_pad_mask = [], [], [], []
             for index, caplen in enumerate(caplens_np):
                 caps_input.append(
-                    caps_np[index][:caplen - 1] + caps_np[index][caplen:])  # 将<end>去掉 由原来的82维度变成了81维度 [[],[]]
+                    caps_np[index][:caplen - 1] + caps_np[index][caplen:])
                 caps_target += caps_np[index][
-                               1:caplen]  # 去掉了<start> 但是扔包含<end> 变成了30维度 [1, 1, 6, 10, 1, 7, 1, 17, 8, 1, 7, 10, 11, 8, 11, 1, 6, 7, 1, 8, 1, 12, 6, 1, 1, 11, 1, 1, 6, 50]
-                decode_lengths.append(caplen - 1)  # [30，41,22...26] 这个完全是序列的正常长度，去掉了<start>和<end>
+                               1:caplen]
+                decode_lengths.append(caplen - 1)
 
             caps_input = torch.tensor(caps_input).to(
-                device)  # tensor([[49, 1, 1, 6, 10, 1, 7, 1, 17, 8, 1, 7, 10, 11, 8, 11, 1, 6, 7,  ...,  0,  0,  0],[],[]])   [16,81]
-            targets = torch.tensor(caps_target, dtype=torch.long).to(device)  # [635]拉平到一维度
-            decode_lengths = np.array(decode_lengths)  # 不包括<start> <end>
+                device)
+            targets = torch.tensor(caps_target, dtype=torch.long).to(device)
+            decode_lengths = np.array(decode_lengths)
             tgt_pad_mask = make_std_mask(caps_input,
-                                         pad=0)  # [16,81,81] 不包括<start> 生成[81,81]的掩码，正常序列的部分为True,0填充的部分为False
-            # tgt_pad_mask = torch.tensor(tgt_pad_mask).to(device)
+                                         pad=0)
             with amp.autocast(True):
                 imgs = encoder(imgs)
-                logits = decoder(caps_input, imgs, tgt_pad_mask)  # scores:[16,81,256]  _:[16,81]
-                # scores_packed = pack_padded_sequence(probs, decode_lengths, batch_first=True, enforce_sorted=False)
+                logits = decoder(caps_input, imgs, tgt_pad_mask)
                 scores_packed = None
-                for index, decode_len in enumerate(decode_lengths):  # 去掉模型预测出 相对于正确标注 多余的部分
+                for index, decode_len in enumerate(decode_lengths):
                     if scores_packed is None:
-                        scores_packed = logits[index, :decode_len, :]  # [..,256]
+                        scores_packed = logits[index, :decode_len, :]
                     else:
                         scores_packed = torch.cat([scores_packed, logits[index, :decode_len, :]], dim=0)
                 loss = criterion(scores_packed, targets)
@@ -483,7 +479,7 @@ def validate_with_gold(encoder, decoder,  criterion, val_loader):
             batch_time.update(time.time() - batch_start)
             batch_start=time.time()
 
-            if i % 100 == 0:  # print_freq=15
+            if i % 100 == 0:
                 logger.info('Validation with gold: [{0}/{1}]\t'
                                'Batch Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                                'ValLoss {loss.val:.4f} ({loss.avg:.4f})\t'
@@ -499,8 +495,7 @@ def validate_with_gold(encoder, decoder,  criterion, val_loader):
                                                                                       top3=top3accs,
                                                                                       top4=top4accs,
                                                                                       top5=top5accs))
-                # if acc1<70.0:
-                #     print(caps.cpu())
+
                 print('Validation with gold: [{0}/{1}]\t'
                       'Batch Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                       'ValLoss {loss.val:.4f} ({loss.avg:.4f})\t'
@@ -517,7 +512,7 @@ def validate_with_gold(encoder, decoder,  criterion, val_loader):
                                                                            top4=top4accs,
                                                                            top5=top5accs))
 
-            for index, decode_len in enumerate(decode_lengths):  # 去掉模型预测出 相对于正确标注 多余的部分
+            for index, decode_len in enumerate(decode_lengths):
                 _, preds = torch.max(logits[index, :decode_len, :], dim=-1)
                 hypotheses.append(preds.tolist())
 

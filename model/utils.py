@@ -353,9 +353,9 @@ def adjust_learning_rate(optimizer, shrink_factor):
     print("The new learning rate is %f\n" % (optimizer.param_groups[0]['lr'],))
 
 
-def print_model_parm_nums(model):            #得到模型参数总量
+def print_model_parm_nums(model):
     total = sum([param.nelement() for param in model.parameters()])
-    print('  + Number of params: %.2fM' % (total / 1e6))     #每一百万为一个单位
+    print('  + Number of params: %.2fM' % (total / 1e6))
 
 
 def accuracy(scores, targets, k):

@@ -63,7 +63,7 @@ class Generator(nn.Module):
         return F.log_softmax(self.proj(x), dim=-1)
 
 
-# Encoder由N=6个相同的层组成。
+
 def clones(module, N):
     "Produce N identical layers."
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
@@ -84,7 +84,7 @@ class TransformerEncoder(nn.Module):
         return self.norm(x)
 
 
-# 归一化
+
 class LayerNorm(nn.Module):
     "Construct a layernorm module (See citation for details)."
 
@@ -100,8 +100,7 @@ class LayerNorm(nn.Module):
         return self.a_2 * (x - mean) / (std + self.eps) + self.b_2
 
 
-# 为了能方便地使用这些残差连接，
-# 模型中所有的子层和Embedding层的输出都设定成了相同的维度，即dmodel=512
+
 class SublayerConnection(nn.Module):
     """
     A residual connection followed by a layer norm.
@@ -130,11 +129,11 @@ class EncoderLayer(nn.Module):
 
     def forward(self, x, mask):
         "Follow Figure 1 (left) for connections."
-        x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, mask))  # x 经过norm层标准化后再输入到self attention层再与原来x相加
-        return self.sublayer[1](x, self.feed_forward)  # x 经过norm层标准化后再输入到feed_forward层再与原来x相加
+        x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, mask))
+        return self.sublayer[1](x, self.feed_forward)
 
 
-# Decoder由N=6个相同的层组成
+
 class Decoder(nn.Module):
     "Generic N layer decoder with masking."
 
@@ -196,7 +195,7 @@ class MultiHeadedAttention(nn.Module):
         # We assume d_v always equals d_k
         self.d_k = d_model // h  # 512//8=64
         self.h = h  # 8
-        self.linears = clones(nn.Linear(d_model, d_model), 4)  # 4个512*512线性层
+        self.linears = clones(nn.Linear(d_model, d_model), 4)
         self.attn = None
         self.dropout = nn.Dropout(p=dropout)
 

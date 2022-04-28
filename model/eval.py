@@ -22,8 +22,7 @@ hypethese_file ="./_test_hypethese.txt"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # sets device for model and PyTorch tensors
 cudnn.benchmark = True  # set to true only if inputs to model are fixed size; otherwise lot of computational overhead
-# print("当前GPU设备索引为：",torch.cuda.current_device() ) # 返回当前设备索引
-#checkpoint = torch.load(checkpoint,map_location=torch.device('cpu') )
+
 
 # Load word map (word2ix)
 
@@ -58,7 +57,7 @@ def save_to_file(filename,references, data,word_dic,truth=False):
     # ture_f.write('Smiles'+'\n')
     all_count = len(data)
     count = 0
-    for i in range(all_count):#预测 全部smiles的序号
+    for i in range(all_count):
         true_ids = references[i][0]
         ids = data[i]
         if truth:
@@ -226,7 +225,7 @@ def swin_evaluate(beam_size, encoder, decoder,test_dir):
 
 
             acc_score, _ = acc(hypotheses, references)
-            print(f"当前已预测{(i + 1) * 512}个，当前正确率为：{acc_score}")
+            print(f"current number{(i + 1) * 512}个，current_acc：{acc_score}")
         assert len(references) == len(hypotheses)
 
     valid = save_to_file(hypethese_file, references, hypotheses, rev_word_map)
