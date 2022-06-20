@@ -61,7 +61,7 @@ Data
 ```
 this is a example for Swin-transformer-celoss
 cd model/Swin-transformer-celoss
-CUDA_VISIBLE_DEVICES="1" python -m torch.distributed.launch --nproc_per_node 1 --master_port 29500 main.py   --resume <checkpoint-file> 
+CUDA_VISIBLE_DEVICES="0,1,2,3" python -m torch.distributed.launch --nproc_per_node 4 --master_port 29500 main.py   --resume <checkpoint-file> 
 
 
 ```
@@ -73,7 +73,7 @@ CUDA_VISIBLE_DEVICES="1" python -m torch.distributed.launch --nproc_per_node 1 -
 ```
 this is a example for Swin-transformer-celoss
 cd model/Swin-transformer-celoss
-CUDA_VISIBLE_DEVICES="1" python -m torch.distributed.launch --nproc_per_node 1 --master_port 29500 main.py --eval  --resume <checkpoint-file> --test_dir <label-file>
+CUDA_VISIBLE_DEVICES="0" python -m torch.distributed.launch --nproc_per_node 1 --master_port 29500 main.py --eval  --resume <checkpoint-file> --test_dir <label-file>
 
 
 ```
