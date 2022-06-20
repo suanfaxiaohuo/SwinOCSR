@@ -14,7 +14,7 @@ The our **datasets** are available in SMILES format to generate images
 
 Download form "dataset"
 
-User GenerateBatchimage to generate the images  
+User cdk/src/main/java/GenerateBatchimage to generate the images  
 User Binary_images to generate binary images  
 
 Saving binary images to  "Data/500wan/500wanBinarizationPNG/"
