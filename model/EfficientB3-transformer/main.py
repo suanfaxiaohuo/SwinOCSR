@@ -152,16 +152,19 @@ def main(config) :
     data_loader_train, data_loader_val, data_loader_test, mixup_fn = SMILES_build_loader_500wan(config, dir)
 
     logger.info(f"Creating model:{config.MODEL.TYPE}/{config.MODEL.NAME}")
-
+    if config.EVAL_MODE:
+        tag = False
+    else:
+        tag = True
     decoder = Transformer(dim=decoder_dim, ff_dim=ff_dim, num_head=num_head, encoder_num_layer=encoder_num_layer,
                           decoder_num_layer=decoder_num_layer,
                           vocab_size=len(word_map), max_len=max_len,
-                          drop_rate=dropout, tag=True)
+                          drop_rate=dropout, tag=tag)
 
     decoder = decoder.cuda()
     decoder_optimizer = torch.optim.AdamW(params=filter(lambda p: p.requires_grad, decoder.parameters()),
                                           lr=decoder_lr, weight_decay=5e-6, eps=2e-7)
-    encoder = Encoder(tag=True)
+    encoder = Encoder(tag=tag)
     encoder.cuda()
     encoder_optimizer = build_optimizer(config, encoder)
     # if config.AMP_OPT_LEVEL != "O0":
