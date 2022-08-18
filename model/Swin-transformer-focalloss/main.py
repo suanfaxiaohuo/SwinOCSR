@@ -8,8 +8,6 @@ from torch.cuda import amp
 import sys
 sys.path.append("..")
 
-from datetime import timedelta
-import torch.nn.functional as F
 import os
 import time
 import argparse
@@ -20,7 +18,6 @@ import torch
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 from torch.autograd import Variable
-from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
 from timm.utils import AverageMeter
 from transformer import make_std_mask, subsequent_mask
 from config import get_config
@@ -31,11 +28,9 @@ from nltk.translate.bleu_score import corpus_bleu
 from optimizer import build_optimizer
 from logger import create_logger
 from model_utils import *
-import argparse, json
+import argparse
 from torch import nn
-import pandas as pd
 import deepsmiles
-from PIL import Image, ImageFilter
 from eval import Swin_Evaluate
 # try:
 #     # noinspection PyUnresolvedReferences
