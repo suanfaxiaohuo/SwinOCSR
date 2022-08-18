@@ -77,14 +77,14 @@ class FocalLoss(nn.Module):
         return weighted_loss.sum()
 
 
-def acc(pred_data,test_data):
+def acc(pred_data, test_data):
     error_ids = []
     sum_count = len(pred_data)
     count = 0
     notin_count = 0
     for i in range(sum_count):
         if pred_data[i] == test_data[i][0]:
-                count+=1
+                count += 1
         else:
             error_ids.append(i)
             notin_count+=1
@@ -141,7 +141,7 @@ def parse_option():
     parser.add_argument("--test_dir", default='../../Data/500wan/500wan_shuffle_DeepSMILES_test.pkl', type=str,
                         help='direction for eval_dataset')
 
-    args, unparsed = parser.parse_known_args()
+    args, _ = parser.parse_known_args()
 
     config = get_config(args)
 
