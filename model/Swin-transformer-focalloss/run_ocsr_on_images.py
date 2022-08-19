@@ -129,7 +129,7 @@ class FocalLossModelInference:
         Run SwinOCSR model on images in given directory and return SMILES
 
         Args:
-            img_dir (str): root directory that contains a directory with images
+            img_dir (str): root directory images
 
         Returns:
             List[str]: DeepSMILES representations of images in sub-directory
