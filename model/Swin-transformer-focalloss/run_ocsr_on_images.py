@@ -275,7 +275,6 @@ def main():
     output_file_path = os.path.join(img_dir, 'smiles_output.tsv')
     with open(output_file_path, 'w') as output_file:
         for im_name, smiles in smiles_list:
-            print(im_name, smiles)
             output_file.write(f"{im_name}\t{smiles}\n")
 
 
