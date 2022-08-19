@@ -77,3 +77,9 @@ CUDA_VISIBLE_DEVICES="0" python -m torch.distributed.launch --nproc_per_node 1 -
 
 
 ```
+
+## How to run the Swin Transformer (focal loss) model on images
+* Copy swin_transform_focalloss.pth to model/Swin-transformer-focalloss/
+* `cd model/Swin-transformer-focalloss/`
+* Run `python run_ocsr_on_images.py --data-path ./path/of/directory/with/images`
+* The script runs the Swin Transformer model on all images in the given directory and saves the results in `smiles_output.tsv` in the same directory. Each line of the output file contains the image file name and the SMILES representation of the depicted molecule.

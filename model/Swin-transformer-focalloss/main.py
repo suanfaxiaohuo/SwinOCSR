@@ -4,23 +4,16 @@
 # Licensed under The MIT License [see LICENSE for details]
 # Written by Ze Liu
 # --------------------------------------------------------
-from torch.cuda import amp
 import sys
 sys.path.append("..")
 
-from datetime import timedelta
-import torch.nn.functional as F
 import os
 import time
 import argparse
 import datetime
 import numpy as np
 from pre_transformer import Transformer
-import torch
-import torch.backends.cudnn as cudnn
-import torch.distributed as dist
-from torch.autograd import Variable
-from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
+
 from timm.utils import AverageMeter
 from transformer import make_std_mask, subsequent_mask
 from config import get_config
@@ -31,29 +24,26 @@ from nltk.translate.bleu_score import corpus_bleu
 from optimizer import build_optimizer
 from logger import create_logger
 from model_utils import *
-import argparse, json
-from torch import nn
-import pandas as pd
-import deepsmiles
-from PIL import Image, ImageFilter
-from eval import Swin_Evaluate
-# try:
-#     # noinspection PyUnresolvedReferences
-#     from apex import amp
-#     from apex.parallel import convert_syncbn_model
-# except ImportError:
-#     amp = None
-from torch.cuda import amp
-#os.environ['GLOO_SOCKET_IFNAME'] = 'enp1s0f0'
+import argparse
 
- # folder with data files saved by create_input_files.py
-decoder_dim = 256 # dimension of decoder RNN
+import deepsmiles
+from eval import Swin_Evaluate
+
+import torch
+import torch.backends.cudnn as cudnn
+import torch.distributed as dist
+from torch import nn
+from torch.autograd import Variable
+from torch.cuda import amp
+
+
+decoder_dim = 256  # dimension of decoder RNN
 dropout = 0.1
-ff_dim=2048
-num_head=8
-encoder_num_layer=6
-decoder_num_layer=6
-max_len=277
+ff_dim = 2048
+num_head = 8
+encoder_num_layer = 6
+decoder_num_layer = 6
+max_len = 277
 decoder_lr = 5e-4
 best_acc = 0.
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -87,14 +77,14 @@ class FocalLoss(nn.Module):
         return weighted_loss.sum()
 
 
-def acc(pred_data,test_data):
+def acc(pred_data, test_data):
     error_ids = []
     sum_count = len(pred_data)
     count = 0
     notin_count = 0
     for i in range(sum_count):
         if pred_data[i] == test_data[i][0]:
-                count+=1
+                count += 1
         else:
             error_ids.append(i)
             notin_count+=1
@@ -105,7 +95,7 @@ def greedy_decode(decoder, memory, max_len, start_symbol, end_symbol):
     ys = torch.ones(1, 1).fill_(start_symbol).type(torch.long)
     logits = None
     for i in range(max_len-1):
-        logit= decoder(Variable(ys).to(device), memory,
+        logit = decoder(Variable(ys).to(device), memory,
                            Variable(subsequent_mask(ys.size(1)).type(torch.long)).to(device))
         prob = nn.Softmax(dim=-1)(logit[0][i])
         _, next_word = torch.max(prob, dim=-1)
@@ -114,9 +104,6 @@ def greedy_decode(decoder, memory, max_len, start_symbol, end_symbol):
                         torch.ones(1, 1).fill_(next_word).type(torch.long)], dim=1)
         if i == max_len - 2:
             logits = logit
-        # if next_word == end_symbol:
-        #     logits = logit
-        #     break
     return ys, logits
 
 def parse_option():
@@ -154,7 +141,7 @@ def parse_option():
     parser.add_argument("--test_dir", default='../../Data/500wan/500wan_shuffle_DeepSMILES_test.pkl', type=str,
                         help='direction for eval_dataset')
 
-    args, unparsed = parser.parse_known_args()
+    args, _ = parser.parse_known_args()
 
     config = get_config(args)
 
@@ -166,14 +153,15 @@ def main(config) :
     global best_acc, epochs_since_improvement, checkpoint, start_epoch, fine_tune_encoder, word_map
     word_map_file = '../../Data/500wan/500wan_shuffle_DeepSMILES_word_map'
     word_map = torch.load(word_map_file)
-    data_loader_train, data_loader_val, data_loader_test, mixup_fn = SMILES_build_loader_500wan(config, dir)
+    data_loader_train, data_loader_val, _, mixup_fn = SMILES_build_loader_500wan(config, dir)
 
     logger.info(f"Creating model:{config.MODEL.TYPE}/{config.MODEL.NAME}")
     if config.EVAL_MODE:
         tag = False
     else:
         tag = True
-    decoder = Transformer(dim=decoder_dim, ff_dim=ff_dim, num_head=num_head, encoder_num_layer=encoder_num_layer,
+    decoder = Transformer(dim=decoder_dim, ff_dim=ff_dim, num_head=num_head,
+                          encoder_num_layer=encoder_num_layer,
                           decoder_num_layer=decoder_num_layer,
                           vocab_size=len(word_map), max_len=max_len,
                           drop_rate=dropout, tag=tag)
@@ -185,9 +173,6 @@ def main(config) :
     encoder.to(device)
     encoder_optimizer = build_optimizer(config, encoder)
 
-    # if config.AMP_OPT_LEVEL != "O0":
-    #     decoder, decoder_optimizer = amp.initialize(decoder, decoder_optimizer, opt_level=config.AMP_OPT_LEVEL)
-    #     encoder, encoder_optimizer = amp.initialize(encoder, encoder_optimizer, opt_level=config.AMP_OPT_LEVEL)
     encoder = torch.nn.parallel.DistributedDataParallel(encoder, device_ids=[config.LOCAL_RANK], broadcast_buffers=False)
     decoder = torch.nn.parallel.DistributedDataParallel(decoder, device_ids=[config.LOCAL_RANK],
                                                       broadcast_buffers=False)
@@ -205,12 +190,6 @@ def main(config) :
     encoder_lr_scheduler = build_scheduler(config, encoder_optimizer, len(data_loader_train))
     decoder_lr_scheduler = torch.optim.lr_scheduler.StepLR(decoder_optimizer,10)
 
-    # if config.AUG.MIXUP > 0.:
-    #     # smoothing is handled with mixup label transform
-    #     criterion = SoftTargetCrossEntropy()
-    # elif config.MODEL.LABEL_SMOOTHING > 0.:
-    #     criterion = LabelSmoothingCrossEntropy(smoothing=config.MODEL.LABEL_SMOOTHING)
-    # else:
     criterion = FocalLoss()
     max_accuracy = 0.0
 
@@ -221,7 +200,6 @@ def main(config) :
                 logger.warning(f"auto-resume changing resume file from {config.MODEL.RESUME} to {resume_file}")
             config.defrost()
             config.MODEL.RESUME = resume_file
-            #config.MODEL.RESUME = '/home/xyji/xzp/Experiment/Swin-Transformer-main/500wan-swin-stranformer-focalloss/output/swin_large_patch4_window7_224/default/swintransform-transform_10.pth'
             config.freeze()
             logger.info(f'auto resuming from {resume_file}')
         else:
@@ -249,19 +227,11 @@ def main(config) :
                                           encoder=encoder,
                                           decoder=decoder,
                                           criterion=criterion)
-        # recent_bleu = test(test_loader=data_loader_test,
-        #                    encoder=encoder,
-        #                    decoder=decoder,
-        #                    criterion=criterion)
+
         is_best = recent_acc > best_acc
         best_acc = max(recent_acc, best_acc)
         if dist.get_rank() == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
             save_checkpoint(config, epoch, encoder_without_ddp, encoder_optimizer, decoder_without_ddp, decoder_optimizer, max_accuracy, encoder_lr_scheduler,decoder_lr_scheduler, logger, best_acc, is_best)
-
-        # acc1, acc5, loss = validate(config, data_loader_val, encoder)
-        # logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
-        # max_accuracy = max(max_accuracy, acc1)
-        # logger.info(f'Max accuracy: {max_accuracy:.2f}%')
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -292,14 +262,10 @@ def train_one_epoch(config, encoder, encoder_optimizer, decoder, decoder_optimiz
     start = time.time()
     end = time.time()
     for idx, (imgs, caps, caplens) in enumerate(train_loader):
-        # samples = samples.cuda(non_blocking=True)
-        # targets = targets.cuda(non_blocking=True)
         imgs = imgs.cuda(non_blocking=True)
         caps = caps.cuda(non_blocking=True)
         caplens = caplens.cuda(non_blocking=True)
         caps_np = caps.cpu().tolist()
-        # if mixup_fn is not None:
-        #     samples, targets = mixup_fn(samples, targets)
         caplens_np = caplens.squeeze().cpu().tolist()
         caps_input, caps_target, decode_lengths, tgt_pad_mask = [], [], [], []
         for index, caplen in enumerate(caplens_np):
@@ -312,9 +278,6 @@ def train_one_epoch(config, encoder, encoder_optimizer, decoder, decoder_optimiz
         targets = torch.tensor(caps_target, dtype=torch.long).cuda()  # Level to one dimension
         decode_lengths = np.array(decode_lengths)
         tgt_pad_mask = make_std_mask(caps_input, pad=0)  # Generate mask
-        # print("caps_input",caps_input.size())
-        # print("tgt_pad_mask",tgt_pad_mask.size())
-        # tgt_pad_mask = torch.tensor(tgt_pad_mask).to(device)
         with amp.autocast(True):
             imgs = encoder(imgs)
             scores = decoder(caps_input, imgs, tgt_pad_mask)  # scores:[16,81,256]  _:[16,81]
@@ -330,7 +293,6 @@ def train_one_epoch(config, encoder, encoder_optimizer, decoder, decoder_optimiz
         encoder_optimizer.zero_grad()
         decoder_optimizer.zero_grad()
         scaler.scale(loss).backward()
-        #loss.backward()
         if config.TRAIN.CLIP_GRAD:
             encoder_grad_norm = torch.nn.utils.clip_grad_norm_(encoder.parameters(), config.TRAIN.CLIP_GRAD)
             decoder_grad_norm = torch.nn.utils.clip_grad_norm_(decoder.parameters(), config.TRAIN.CLIP_GRAD)
@@ -340,35 +302,9 @@ def train_one_epoch(config, encoder, encoder_optimizer, decoder, decoder_optimiz
         scaler.step(encoder_optimizer)
         scaler.step(decoder_optimizer)
         scaler.update()
-        # encoder_optimizer.step()
-        # decoder_optimizer.step()
-
-
-        # if config.AMP_OPT_LEVEL != "O0":
-        #     with amp.scale_loss(loss, encoder_optimizer) as scaled_loss:
-        #         scaled_loss.backward(retain_graph=True)
-        #     with amp.scale_loss(loss, decoder_optimizer) as Scaled_loss:
-        #         Scaled_loss.backward()
-        #     if config.TRAIN.CLIP_GRAD:
-        #         encoder_grad_norm = torch.nn.utils.clip_grad_norm_(encoder.parameters(), config.TRAIN.CLIP_GRAD)
-        #         decoder_grad_norm = torch.nn.utils.clip_grad_norm_(decoder.parameters(), config.TRAIN.CLIP_GRAD)
-        #     else:
-        #         encoder_grad_norm = get_grad_norm(encoder.parameters())
-        #         decoder_grad_norm = get_grad_norm(decoder.parameters())
-        # else:
-        #     loss.backward()
-        #     if config.TRAIN.CLIP_GRAD:
-        #         encoder_grad_norm = torch.nn.utils.clip_grad_norm_(encoder.parameters(), config.TRAIN.CLIP_GRAD)
-        #         decoder_grad_norm = torch.nn.utils.clip_grad_norm_(decoder.parameters(), config.TRAIN.CLIP_GRAD)
-        #     else:
-        #         encoder_grad_norm = get_grad_norm(encoder.parameters())
-        #         decoder_grad_norm = get_grad_norm(decoder.parameters())
-        # encoder_optimizer.step()
-        # decoder_optimizer.step()
         encoder_lr_scheduler.step_update(epoch * num_steps + idx)
 
         torch.cuda.synchronize()
-
 
         encoder_norm_meter.update(encoder_grad_norm)
         decoder_norm_meter.update(decoder_grad_norm)
@@ -445,9 +381,6 @@ def validate_with_gold(encoder, decoder,  criterion, val_loader):
         for i, (imgs, caps, caplens) in enumerate(val_loader):
             if i > 10000:
                 break
-            # Move to device, if available
-            # imgs = np.concatenate([imgs, imgs, imgs], axis=1)
-            # imgs = torch.from_numpy(imgs).to(device)
             imgs = imgs.to(device)
             caps = caps.to(device)
             caplens = caplens.to(device)
@@ -512,8 +445,7 @@ def validate_with_gold(encoder, decoder,  criterion, val_loader):
                                                                                       top3=top3accs,
                                                                                       top4=top4accs,
                                                                                       top5=top5accs))
-                # if acc1<70.0:
-                #     print(caps.cpu())
+
                 print('Validation with gold: [{0}/{1}]\t'
                       'Batch Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                       'Batch_ValLoss {loss.val:.4f} ({loss.avg:.4f})\t'
@@ -606,8 +538,6 @@ def test(encoder,  decoder, criterion, test_loader):
             if i > 500:
                 break
             # Move to device, if available
-            # imgs = np.concatenate([imgs, imgs, imgs], axis=1)
-            # imgs = torch.from_numpy(imgs).to(device)
             imgs = imgs.to(device)
             caps = caps.to(device)
             caplens = caplens.to(device)
@@ -734,9 +664,6 @@ if __name__ == '__main__':
     else:
         rank = -1
         world_size = -1
-    # config.defrost()
-    # config.LOCAL_RANK = 0
-    # config.freeze()
     config.defrost()
     config.MODEL.NAME = 'Swinfocalloss'
     config.OUTPUT = os.path.join('output', config.MODEL.NAME, config.TAG)
