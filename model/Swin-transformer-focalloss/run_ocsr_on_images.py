@@ -4,7 +4,8 @@ import os
 import argparse
 from tqdm import tqdm
 import deepsmiles
-from typing import List
+from typing import Any, cast, Callable, List, Tuple, Union
+from PIL import Image
 
 import torch
 import torchvision
@@ -26,16 +27,9 @@ class FocalLossModelInference:
         self.word_map = torch.load(word_map_path)
         self.inv_word_map = {v: k for k, v in self.word_map.items()}
 
-        # Define image normalisation steps
-        self.data_transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225])
-        ])
-        # Define device and load models and weights
+        # Define device, load models and weights
         self.dev = "cuda" if torch.cuda.is_available() else "cpu"
-        _, config = self.get_inference_config()
+        self.args, config = self.get_inference_config()
         self.encoder = build_model(config, tag=False)
         self.decoder = self.build_decoder()
         self.load_checkpoint(os.path.join(os.path.split(__file__)[0],
@@ -45,17 +39,19 @@ class FocalLossModelInference:
 
     def load_checkpoint(self, checkpoint_path):
         """
-        Load checkpoint and update encoder and decorder accordingly
+        Load checkpoint and update encoder and decoder accordingly
 
         Args:
             checkpoint_path (str): path of checkpoint file
         """
-        print(f"=====> Resuming form {checkpoint_path} <=====")
+        print(f"=====> Resuming from {checkpoint_path} <=====")
         checkpoint = torch.load(checkpoint_path, map_location='cpu')
-        encoder_msg = self.encoder.load_state_dict(checkpoint['encoder'], strict=False)
-        decoder_msg = self.decoder.load_state_dict(checkpoint['decoder'], strict=False)
-        print(encoder_msg)
-        print(decoder_msg)
+        encoder_msg = self.encoder.load_state_dict(checkpoint['encoder'],
+                                                   strict=False)
+        decoder_msg = self.decoder.load_state_dict(checkpoint['decoder'],
+                                                   strict=False)
+        print(f"Encoder: {encoder_msg}")
+        print(f"Decoder: {decoder_msg}")
         del checkpoint
         torch.cuda.empty_cache()
 
@@ -139,11 +135,10 @@ class FocalLossModelInference:
             List[str]: DeepSMILES representations of images in sub-directory
                        of img_dir
         """
-        loader = torchvision.datasets.ImageFolder(img_dir,
-                                                  transform=self.data_transform)
+        data_loader = SwinOCSRInferenceImageFolder(img_dir)
         deep_smiles = []
         with torch.no_grad():
-            for imgs, _ in tqdm(loader, desc="EVALUATING INPUT IMAGES"):
+            for imgs, im_name in tqdm(data_loader, desc="EVALUATING INPUT IMAGES"):
                 # Add dummy dimension
                 imgs = imgs[None, :]
                 imgs = imgs.to(self.dev)
@@ -162,7 +157,7 @@ class FocalLossModelInference:
                             pre_list.append(self.inv_word_map[j])
                         else:
                             break
-                    deep_smiles.append(''.join(pre_list))
+                    deep_smiles.append((im_name, ''.join(pre_list)))
         return deep_smiles
 
     def deepsmiles2smiles(self, deep_smiles: str) -> str:
@@ -184,13 +179,105 @@ class FocalLossModelInference:
         return smiles
 
 
+class SwinOCSRInferenceImageFolder(torchvision.datasets.ImageFolder):
+    """
+    Modified version of torchvision's ImageFolder.
+    Modifications:
+    - The root directory is the image directory, and not a
+      subdirectory of the image directoy
+    - Every sample contains the image and the image name.
+    - Transformations are pre-defined to match SwinOCSR images
+    """
+    def __init__(
+        self,
+        image_dir: str,
+    ):
+        self.root = image_dir
+        # Define image normalisation steps
+        self.transform = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225])
+        ])
+        self.samples = self.make_dataset(self.root)
+        self.loader = self.pil_loader
+        self.targets = [s[1] for s in self.samples]
+
+    def __getitem__(self, index: int) -> Tuple[Any, Any]:
+        """
+        Args:
+            index (int): Index
+
+        Returns:
+            tuple: (sample, target) image, filename
+        """
+        path, _ = self.samples[index]
+        target = os.path.split(path)[-1]
+        sample = self.loader(path)
+        if self.transform is not None:
+            sample = self.transform(sample)
+        return sample, target
+
+    def __len__(self) -> int:
+        return len(self.samples)
+
+    def pil_loader(self, path: str) -> Image.Image:
+        with open(path, "rb") as f:
+            img = Image.open(f)
+            return img.convert("RGB")
+
+    def has_file_allowed_extension(self, filename: str, extensions: Union[str, Tuple[str, ...]]) -> bool:
+        """Checks if a file is an allowed extension.
+
+        Args:
+            filename (string): path to a file
+            extensions (tuple of strings): extensions to consider (lowercase)
+
+        Returns:
+            bool: True if the filename ends with one of given extensions
+        """
+        return filename.lower().endswith(extensions if isinstance(extensions, str) else tuple(extensions))
+
+    def make_dataset(
+        self,
+        directory: str,
+    ) -> List[Tuple[str, int]]:
+        """Generates a list of samples of a form (path_to_sample, 0).
+
+        The samples are created based on all images in a given directory.
+
+        """
+        extensions = (".jpg", ".jpeg", ".png", ".ppm", ".bmp", ".pgm",
+                      ".tif", ".tiff", ".webp")
+        directory = os.path.expanduser(directory)
+
+        def is_valid_file(x: str) -> bool:
+            return self.has_file_allowed_extension(x, extensions)
+
+        is_valid_file = cast(Callable[[str], bool], is_valid_file)
+
+        instances = []
+        for im_name in os.listdir(directory):
+            im_path = os.path.join(directory, im_name)
+            if is_valid_file(im_path):
+                item = im_path, 0
+                instances.append(item)
+        return instances
+
+
 def main():
     inference = FocalLossModelInference()
-    deep_smiles_list = inference.run_inference_on_images(os.path.abspath("./"))
-    smiles_list = [inference.deepsmiles2smiles(deep_smiles)
-                   for deep_smiles in deep_smiles_list]
-    for smiles in smiles_list:
-        print(smiles)
+    img_dir = inference.args.data_path
+    deep_smiles_list = inference.run_inference_on_images(img_dir)
+    smiles_list = [(im_name, inference.deepsmiles2smiles(deep_smiles))
+                   for im_name, deep_smiles in deep_smiles_list]
+    output_file_path = os.path.join(img_dir, 'smiles_output.tsv')
+    with open(output_file_path, 'w') as output_file:
+        for im_name, smiles in smiles_list:
+            print(im_name, smiles)
+            output_file.write(f"{im_name}\t{smiles}\n")
+
 
 if __name__ == '__main__':
     main()
