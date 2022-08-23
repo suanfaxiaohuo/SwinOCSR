@@ -63,7 +63,8 @@ def positional_encoding_1d(position, d_model):
     angle_rads[:, 0::2] = np.sin(angle_rads[:, 0::2])
     angle_rads[:, 1::2] = np.cos(angle_rads[:, 1::2])
     pos_encoding = angle_rads[np.newaxis, ...]
-    return torch.from_numpy(pos_encoding.astype('float32')).cuda()
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    return torch.from_numpy(pos_encoding.astype('float32')).to(device)
 
 
 class FeedForward(nn.Module):
