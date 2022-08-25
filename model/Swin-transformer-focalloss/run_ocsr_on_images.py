@@ -176,6 +176,8 @@ class FocalLossModelInference:
             smiles = converter.decode(deep_smiles)
         except deepsmiles.DecodeError:
             smiles = False
+        except IndexError:
+            smiles = False
         return smiles
 
 
