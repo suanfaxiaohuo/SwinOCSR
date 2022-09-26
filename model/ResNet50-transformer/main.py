@@ -228,7 +228,7 @@ def main(config) :
         return
     logger.info("Start training")
     start_time = time.time()
-    scaler = amp.GradScaler(True)
+    scaler = amp.GradScaler()
     for epoch in range(config.TRAIN.START_EPOCH, config.TRAIN.EPOCHS):
         data_loader_train.sampler.set_epoch(epoch)
         train_one_epoch(config, encoder, encoder_optimizer, decoder, decoder_optimizer, criterion, data_loader_train, epoch, mixup_fn, encoder_lr_scheduler,scaler)
