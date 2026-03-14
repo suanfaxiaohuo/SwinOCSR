@@ -12,7 +12,7 @@ efficientnet-pytorch==0.7.1
 einops==0.3.2
 future==0.18.2
 fvcore==0.1.5.post20211023
-gensim==0.13.4.1
+gensim==0.13.4
 h5py==3.4.0
 idna==3.3
 importlib-metadata==4.8.1
